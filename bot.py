@@ -7,7 +7,7 @@ import re
 api_id = os.environ.get('API_ID')
 api_hash = os.environ.get('API_HASH')
 bot_token = os.environ.get('BOT_TOKEN')
-admin_id = int(os.environ.get('ADMIN_ID'))  # التأكد من تحويل معرف الإدمن إلى رقم
+admin_id = 1900509620 # التأكد من تحويل معرف الإدمن إلى رقم
 
 # قائمة لحفظ معرفات المستخدمين الذين يتفاعلون مع البوت
 user_ids = set()
